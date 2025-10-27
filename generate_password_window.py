@@ -12,13 +12,13 @@
 #         self.geometry("400x350")
 #         self.resizable(False, False)
 #         self.protocol("WM_DELETE_WINDOW", self.on_close)
-        
-#         self.result = None # Để lưu mật khẩu đã tạo khi người dùng Copy
+
+#         self.result = None # Save the generated password when the user copies it
 
 #         self.create_widgets()
-#         self.generate_new_password() # Tạo mật khẩu khi cửa sổ mở
-        
-#         # Đảm bảo cửa sổ này luôn ở trên cùng và chờ
+#         self.generate_new_password() # Generate password when the window opens
+
+#         # Ensure this window is always on top and waits
 #         self.transient(parent)
 #         self.grab_set()
 #         center_toplevel_window(self, parent)
@@ -31,7 +31,7 @@
 #         ttk.Label(self.main_frame, text="Generated Password:", font=('Arial', 10, 'bold')).pack(anchor=tk.W, pady=(5, 2))
 #         self.txt_generated_password = ttk.Entry(self.main_frame, width=40, font=('Arial', 10))
 #         self.txt_generated_password.pack(fill=tk.X, pady=(0, 10))
-#         self.txt_generated_password.config(state='readonly') # Không cho phép chỉnh sửa
+#         self.txt_generated_password.config(state='readonly') # Prevent editing
 
 #         self.btn_copy = ttk.Button(self.main_frame, text="Copy and Close", command=self.copy_password, width=15)
 #         self.btn_copy.pack(pady=(0, 15))
@@ -40,7 +40,7 @@
 #         self.cb_uppercase_var = tk.BooleanVar(value=True)
 #         self.cb_lowercase_var = tk.BooleanVar(value=True)
 #         self.cb_numbers_var = tk.BooleanVar(value=True)
-#         self.cb_special_chars_var = tk.BooleanVar(value=True) # Mặc định chọn ký tự đặc biệt
+#         self.cb_special_chars_var = tk.BooleanVar(value=True) # Default to including special characters
 
 #         ttk.Checkbutton(self.main_frame, text="Include Uppercase Letters (A-Z)", variable=self.cb_uppercase_var, command=self.generate_new_password).pack(anchor=tk.W, pady=2)
 #         ttk.Checkbutton(self.main_frame, text="Include Lowercase Letters (a-z)", variable=self.cb_lowercase_var, command=self.generate_new_password).pack(anchor=tk.W, pady=2)
@@ -50,7 +50,7 @@
 #         # Length Selector
 #         ttk.Label(self.main_frame, text="Length:", font=('Arial', 10, 'bold')).pack(anchor=tk.W, pady=(15, 2))
 #         self.nud_length = ttk.Spinbox(self.main_frame, from_=8, to=64, increment=1, width=5, font=('Arial', 10), command=self.generate_new_password)
-#         self.nud_length.set(16) # Mặc định độ dài 16
+#         self.nud_length.set(16) # Default length 16
 #         self.nud_length.pack(anchor=tk.W, pady=(0, 15))
 
 #         # Action Buttons
@@ -89,17 +89,17 @@
 #             self.nud_length.set(8)
 
 #         password_chars = []
-#         # Đảm bảo mật khẩu chứa ít nhất một ký tự từ mỗi loại được chọn
+#         # Ensure the password contains at least one character from each selected type
 #         if self.cb_uppercase_var.get(): password_chars.append(random.choice(uppercase_chars))
 #         if self.cb_lowercase_var.get(): password_chars.append(random.choice(lowercase_chars))
 #         if self.cb_numbers_var.get(): password_chars.append(random.choice(number_chars))
 #         if self.cb_special_chars_var.get(): password_chars.append(random.choice(special_chars))
 
-#         # Điền phần còn lại của mật khẩu
+#         # Fill the rest of the password
 #         for _ in range(password_length - len(password_chars)):
 #             password_chars.append(random.choice(character_set))
-        
-#         random.shuffle(password_chars) # Xáo trộn các ký tự
+
+#         random.shuffle(password_chars) # Shuffle the characters
 #         generated_password_str = "".join(password_chars)
 
 #         self.txt_generated_password.config(state='normal') 
@@ -112,11 +112,11 @@
 #         if pwd:
 #             self.clipboard_clear()
 #             self.clipboard_append(pwd)
-#             self.result = pwd # Lưu mật khẩu vào thuộc tính result
-#             self.destroy() # Đóng cửa sổ sau khi sao chép
+#             self.result = pwd # Save the password to the result attribute
+#             self.destroy() # Close the window after copying
 #         else:
 #             messagebox.showwarning("No Password", "No password generated to copy.", parent=self)
 
 #     def on_close(self):
-#         self.result = None # Đặt result là None nếu người dùng chỉ đóng cửa sổ
+#         self.result = None # Set result to None if the user just closes the window
 #         self.destroy()
