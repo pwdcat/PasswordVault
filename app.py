@@ -4,6 +4,19 @@ from tkinter import ttk, messagebox
 from login_window import LoginWindow
 from main_window import MainWindow
 
+# Add Backend path
+import os
+import sys
+backend_path = os.path.join(os.path.dirname(__file__), 'Backend')
+sys.path.insert(0, backend_path)
+
+# Import Backend
+try:
+    from vault_api import setup_master_password, verify_master_password, get_vault_status
+except ImportError as e:
+    messagebox.showerror("Import Error", f"Failed to import Backend modules: {e}")
+    sys.exit(1)
+
 class SecurePasswordVaultApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -26,19 +39,57 @@ class SecurePasswordVaultApp(tk.Tk):
         if self.main_window:
             self.main_window.destroy()
             self.main_window = None
-        
-        self.login_window = LoginWindow(self, self.handle_master_password_check)
+        # Check if this is first-time setup or existing vault
+        vault_exists = os.path.exists('vault.db')
+        is_first_time = not vault_exists
+        self.login_window = LoginWindow(self, self.handle_master_password_check, is_first_time)
 
     def handle_master_password_check(self, entered_password):
-        hardcoded_password = "admin123" 
-        
-        if entered_password == hardcoded_password:
-            if self.login_window:
-                self.login_window.destroy()
-                self.login_window = None
-            self.show_main()
-            return True
-        return False
+        try:
+            # Check if vault exists
+            vault_exists = os.path.exists('vault.db')
+            if not vault_exists:
+                # First-time setup
+                result = setup_master_password(entered_password)
+                if result.get('success'):
+                    # Vault created successfully, now unlock it
+                    unlock_result = verify_master_password(entered_password)
+                    if unlock_result.get('success'):
+                        if self.login_window:
+                            self.login_window.destroy()
+                            self.login_window = None
+                        self.show_main()
+                        return True
+                    else:
+                        # Vault created but couldn't unlock it
+                        if self.login_window:
+                            self.login_window.show_error(
+                                "Vault created but failed to unlock. Please restart the application and try logging in.")
+                        return False
+                else:
+                    # Show error in login window
+                    if self.login_window:
+                        self.login_window.show_error(result.get('error', 'Failed to create vault'))
+                    return False
+            else:
+                # Existing vault - verify master password
+                result = verify_master_password(entered_password)
+                if result.get('success'):
+                    if self.login_window:
+                        self.login_window.destroy()
+                        self.login_window = None
+                    self.show_main()
+                    return True
+                else:
+                    # Show error in login window
+                    if self.login_window:
+                        self.login_window.show_error(result.get('error', 'Incorrect master password'))
+                    return False
+        except Exception as e:
+            # Handle any Backend-related errors
+            error_msg = f"Authentication error: {str(e)}"
+            messagebox.showerror("Error", error_msg)
+            return False
 
     def show_main(self):
         """Show the main application window."""

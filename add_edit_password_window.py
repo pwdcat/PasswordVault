@@ -2,7 +2,19 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import re
 from utils import center_toplevel_window
-# from generate_password_window import GeneratePasswordWindow
+
+# Add Backend path
+import os
+import sys
+backend_path = os.path.join(os.path.dirname(__file__), 'Backend')
+sys.path.insert(0, backend_path)
+
+# Import Backend
+try:
+    from vault_api import generate_strong_password, check_strength
+except ImportError as e:
+    messagebox.showerror("Import Error", f"Failed to import Backend modules: {e}")
+    sys.exit(1)
 
 class AddEditPasswordWindow(tk.Toplevel):
     def __init__(self, parent, mode="add", entry_data=None):
@@ -27,7 +39,9 @@ class AddEditPasswordWindow(tk.Toplevel):
         # Block events from the parent window
         self.grab_set()
 
-        center_toplevel_window(self, parent)
+        # Center the window after all widgets are created
+        self.update_idletasks()
+        center_toplevel_window(self, None)
 
     def create_widgets(self):
         self.main_frame = ttk.Frame(self, padding="15")
@@ -84,7 +98,7 @@ class AddEditPasswordWindow(tk.Toplevel):
         self.txt_service_name.insert(0, self.entry_data.service)
         self.txt_username.insert(0, self.entry_data.username)
         self.txt_password.insert(0, self.entry_data.password)
-        self.txt_notes.insert(tk.END, self.entry_data.notes)
+        # self.txt_notes.insert(tk.END, self.entry_data.notes)
         self.update_password_strength() # Update strength on load
 
     def toggle_password_visibility(self):
@@ -96,14 +110,18 @@ class AddEditPasswordWindow(tk.Toplevel):
             self.btn_toggle_password_visibility.config(text="Hide")
         self.password_visible = not self.password_visible
 
-    # def generate_password(self):
-    #     generate_pwd_window = GeneratePasswordWindow(self)
-    #     self.wait_window(generate_pwd_window) # Wait until the generate password window is closed
-        
-    #     if generate_pwd_window.result: # If a password was generated
-    #         self.txt_password.delete(0, tk.END)
-    #         self.txt_password.insert(0, generate_pwd_window.result)
-    #         self.update_password_strength() # Update strength after generating password
+    def generate_password(self):
+        try:
+            generated_password = generate_strong_password()
+            if generated_password:
+                self.txt_password.delete(0, tk.END)
+                self.txt_password.insert(0, generated_password)
+                self.update_password_strength()
+                messagebox.showinfo("Generated", f"Strong password generated!\n\nPassword: {generated_password}", parent=self)
+            else:
+                messagebox.showerror("Error", "Failed to generate password", parent=self)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to generate password: {str(e)}", parent=self)
 
     def update_password_strength_event(self, event=None):
         self.update_password_strength()
@@ -149,7 +167,7 @@ class AddEditPasswordWindow(tk.Toplevel):
         service = self.txt_service_name.get().strip()
         username = self.txt_username.get().strip()
         password = self.txt_password.get().strip()
-        notes = self.txt_notes.get("1.0", tk.END).strip()
+        # notes = self.txt_notes.get("1.0", tk.END).strip()
         current_strength_text = self.update_password_strength() # Get current strength text
 
 
@@ -162,7 +180,7 @@ class AddEditPasswordWindow(tk.Toplevel):
             'username': username,
             'password': password,
             'strength': current_strength_text,
-            'notes': notes
+            'notes': '' # optional, will be empty for now
         }
         self.destroy()
 

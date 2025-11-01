@@ -3,9 +3,24 @@ from tkinter import ttk, messagebox
 import random
 from datetime import datetime
 from utils import center_toplevel_window
-from password_entry import PasswordEntry
+# Import PasswordEntry from Backend (shared class)
+from Backend.password_entry import PasswordEntry
 from add_edit_password_window import AddEditPasswordWindow
 # from generate_password_window import GeneratePasswordWindow
+
+# Add Backend path
+import os
+import sys
+backend_path = os.path.join(os.path.dirname(__file__), 'Backend')
+sys.path.insert(0, backend_path)
+
+# Import Backend
+try:
+    from vault_api import (get_all_passwords, add_password, update_password, delete_password,
+                          generate_strong_password, prepare_password_list)
+except ImportError as e:
+    messagebox.showerror("Import Error", f"Failed to import Backend modules: {e}")
+    sys.exit(1)
 
 # Toplevel window is used instead of Tk for additional windows
 class MainWindow(tk.Toplevel): 
@@ -16,7 +31,6 @@ class MainWindow(tk.Toplevel):
         self.geometry("800x500")
         # prevent x button
         self.protocol("WM_DELETE_WINDOW", self.on_close)
-        center_toplevel_window(self, parent_root) 
 
         self.parent_root = parent_root  # Save reference to main app
         self.password_entries = [] # List of PasswordEntry objects
@@ -25,12 +39,14 @@ class MainWindow(tk.Toplevel):
 
         self.create_widgets()
 
-        # --- HARDCODED (DATA SAMPLE) ---
-        self.load_sample_data()
-        # --- END HARDCODED (DATA SAMPLE) ---
+        # Load data from Backend
+        self.load_passwords_from_backend()
 
         self.update_status_message()
         self.hide_passwords_in_treeview() # Hide passwords on startup
+
+        self.update_idletasks()
+        center_toplevel_window(self, None)
 
     def create_widgets(self):
         # TOP, fill=X: always fill horizontally
@@ -86,8 +102,8 @@ class MainWindow(tk.Toplevel):
         self.btn_delete = ttk.Button(self.side_menu, text="Delete", command=self.delete_password)
         self.btn_delete.pack(fill=tk.X, pady=5, padx=5)
 
-        # self.btn_generate_pwd = ttk.Button(self.side_menu, text="Generate Password", command=self.generate_password)
-        # self.btn_generate_pwd.pack(fill=tk.X, pady=(15, 5), padx=5)
+        self.btn_generate_pwd = ttk.Button(self.side_menu, text="Generate Password", command=self.generate_password)
+        self.btn_generate_pwd.pack(fill=tk.X, pady=(15, 5), padx=5)
 
         self.btn_copy_pwd = ttk.Button(self.side_menu, text="Copy Password", command=self.copy_password)
         self.btn_copy_pwd.pack(fill=tk.X, pady=5, padx=5)
@@ -105,25 +121,71 @@ class MainWindow(tk.Toplevel):
         self.status_bar = ttk.Label(self, text="Total Passwords: 0", relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
-    def load_sample_data(self):
-        """Function to load hardcoded sample password entries."""
-        self.password_entries.append(PasswordEntry(
-            self.next_id, "Google", "myemail@gmail.com", "myG00gleP@ss!", "Strong", 
-            datetime.now().replace(day=1), "Main Email"
-        ))
-        self.next_id += 1
-        self.password_entries.append(PasswordEntry(
-            self.next_id, "Facebook", "johndoe", "FB_P@ss_Weak", "Weak", 
-            datetime.now().replace(day=5), ""
-        ))
-        self.next_id += 1
-        self.password_entries.append(PasswordEntry(
-            self.next_id, "Online Banking", "user123", "B@nk1ngS3cur3!", "Very Strong", 
-            datetime.now().replace(day=10), "Main Bank Account"
-        ))
-        self.next_id += 1
-        
-        self.refresh_treeview()
+    def load_passwords_from_backend(self):
+        try:
+            # Get passwords from Backend
+            result = get_all_passwords()
+            if result.get('success'):
+                # Format passwords for display
+                formatted_passwords = prepare_password_list(result)
+                self.password_entries = []  # Reset list
+
+                # Convert Backend format to frontend format
+                for backend_entry in formatted_passwords:
+                    if backend_entry:  # Skip None entries
+                        try:
+                            # Parse datetime strings if they exist, otherwise use current time
+                            last_updated_str = backend_entry.get('last_updated', '')
+                            created_at_str = backend_entry.get('created_at', '')
+                            
+                            # Parse datetime strings
+                            if last_updated_str:
+                                try:
+                                    if isinstance(last_updated_str, str):
+                                        last_updated = datetime.fromisoformat(last_updated_str.replace('Z', '+00:00'))
+                                    else:
+                                        last_updated = last_updated_str
+                                except Exception as e:
+                                    last_updated = datetime.now()
+                            else:
+                                last_updated = datetime.now()
+                                
+                            if created_at_str:
+                                try:
+                                    if isinstance(created_at_str, str):
+                                        created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                                    else:
+                                        created_at = created_at_str
+                                except Exception as e:
+                                    created_at = None
+                            else:
+                                created_at = None
+
+                            # Create frontend entry with properly parsed date
+                            frontend_entry = PasswordEntry(
+                                backend_entry['id'],
+                                backend_entry['service'],
+                                backend_entry['username'],
+                                backend_entry['password'],
+                                backend_entry['strength'],
+                                backend_entry.get('notes', ''),
+                                created_at,
+                                last_updated
+                            )
+                            self.password_entries.append(frontend_entry)
+                        except Exception as e:
+                            # Skip problematic entries
+                            print(f"Skipping invalid password entry: {str(e)}")
+                            continue
+            else:
+                # Handle case where no passwords exist yet (empty vault)
+                self.password_entries = []
+
+            self.refresh_treeview()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load passwords: {str(e)}")
+            self.password_entries = []
+            self.refresh_treeview()
 
     def refresh_treeview(self):
         """Update the Treeview with current password entries"""
@@ -135,10 +197,10 @@ class MainWindow(tk.Toplevel):
         for entry in self.password_entries:
             display_password = entry.password if not self.passwords_hidden else "********"
             self.treeview.insert("", tk.END, values=(
-                entry.service, 
-                entry.username, 
-                display_password, 
-                entry.strength, 
+                entry.service,
+                entry.username,
+                display_password,
+                entry.strength,
                 entry.last_updated.strftime("%Y-%m-%d")
             ), iid=entry.id) # Use ID of the object as the iid of the Treeview
 
@@ -188,19 +250,23 @@ class MainWindow(tk.Toplevel):
 
         if add_edit_window.result: # If user pressed Save
             new_entry_data = add_edit_window.result
-            new_entry = PasswordEntry(
-                self.next_id,
-                new_entry_data['service'],
-                new_entry_data['username'],
-                new_entry_data['password'],
-                new_entry_data['strength'], 
-                datetime.now(),
-                new_entry_data['notes']
-            )
-            self.password_entries.append(new_entry)
-            self.next_id += 1
-            self.refresh_treeview()
-            messagebox.showinfo("Success", "Password added successfully!", parent=self)
+            try:
+                # Save password to backend database
+                result = add_password(
+                    new_entry_data['service'],
+                    new_entry_data['username'],
+                    new_entry_data['password'],
+                    new_entry_data['notes']
+                )
+
+                if result.get('success'):
+                    # Reload passwords from Backend to ensure sync
+                    self.load_passwords_from_backend()
+                    messagebox.showinfo("Success", "Password added successfully!", parent=self)
+                else:
+                    messagebox.showerror("Error", result.get('error', 'Failed to add password'), parent=self)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to add password: {str(e)}", parent=self)
 
     def edit_password(self):
         selected_entry = self.get_selected_password_entry()
@@ -210,25 +276,56 @@ class MainWindow(tk.Toplevel):
             
             if add_edit_window.result: # Nếu người dùng nhấn Save
                 updated_data = add_edit_window.result
-                selected_entry.service = updated_data['service']
-                selected_entry.username = updated_data['username']
-                selected_entry.password = updated_data['password']
-                selected_entry.strength = updated_data['strength']
-                selected_entry.notes = updated_data['notes']
-                selected_entry.last_updated = datetime.now()
-                self.refresh_treeview()
-                messagebox.showinfo("Success", "Password updated successfully!", parent=self)
+                try:
+                    # Update password in Backend database
+                    result = update_password(
+                        selected_entry.id,
+                        updated_data['service'],
+                        updated_data['username'],
+                        updated_data['password'],
+                        updated_data['notes']
+                    )
+
+                    if result.get('success'):
+                        # Reload passwords from Backend to ensure sync
+                        self.load_passwords_from_backend()
+                        messagebox.showinfo("Success", "Password updated successfully!", parent=self)
+                    else:
+                        messagebox.showerror("Error", result.get('error', 'Failed to update password'), parent=self)
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to update password: {str(e)}", parent=self)
 
     def delete_password(self):
         selected_entry = self.get_selected_password_entry()
         if selected_entry:
-            if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete the password for '{selected_entry.service}'?", parent=self):
-                self.password_entries.remove(selected_entry)
-                self.refresh_treeview()
-                messagebox.showinfo("Success", "Password deleted successfully!", parent=self)
+            if messagebox.askyesno("Confirm Delete",
+                                   f"Are you sure you want to delete the password for '{selected_entry.service}'?",
+                                   parent=self):
+                try:
+                    # Delete password from Backend database
+                    result = delete_password(selected_entry.id)
 
-    # def generate_password(self):
-    #     GeneratePasswordWindow(self)
+                    if result.get('success'):
+                        # Reload passwords from Backend to ensure sync
+                        self.load_passwords_from_backend()
+                        messagebox.showinfo("Success", "Password deleted successfully!", parent=self)
+                    else:
+                        messagebox.showerror("Error", result.get('error', 'Failed to delete password'), parent=self)
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to delete password: {str(e)}", parent=self)
+
+    def generate_password(self):
+        try:
+            generated_password = generate_strong_password()
+            if generated_password:
+                # Copy to clipboard for easy use
+                self.clipboard_clear()
+                self.clipboard_append(generated_password)
+                messagebox.showinfo("Generated", f"Strong password generated and copied to clipboard!\n\nPassword: {generated_password}", parent=self)
+            else:
+                messagebox.showerror("Error", "Failed to generate password", parent=self)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to generate password: {str(e)}", parent=self)
 
     def copy_password(self):
         selected_entry = self.get_selected_password_entry()
